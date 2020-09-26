@@ -13,9 +13,8 @@ namespace FakerLib.PluginSupport
 
         public List<T> GenerateList()
         {
-            Random r = new Random();
             List<T> tmp = new List<T>();
-            for (int i = 0; i < r.Next(50); i++)
+            for (int i = 0; i < new Random().Next(10); i++)
             {
                 tmp.Add(Generate());
             }

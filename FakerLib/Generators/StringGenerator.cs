@@ -9,7 +9,7 @@ namespace FakerLib.Generators
         public override string Generate()
         {
             Random r = new Random();
-            byte[] tmp = new byte[r.Next(500) * 2];
+            byte[] tmp = new byte[r.Next(15) * 2];
             r.NextBytes(tmp);
             return Encoding.UTF8.GetString(tmp);
         }
