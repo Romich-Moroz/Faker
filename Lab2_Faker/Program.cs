@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using FakerLib;
 using FakerLib.Configuration;
-using FakerLib.Generators;
 
 namespace Lab2_Faker
 {
@@ -55,7 +53,7 @@ namespace Lab2_Faker
         }
         class Circular3
         {
-            public Circular1 c { get; }
+            public Circular1 c { get; set; }
         }
 
         class StringGenClass
@@ -68,19 +66,45 @@ namespace Lab2_Faker
             }
         }
 
+        struct SimpleStruct
+        {
+            public string field1;
+            char field2;         
+        }
+        class PrivSetClass
+        {
+            public int prop { get; }
+            public long prop2 { get; set; }
+
+            public PrivSetClass(int prop)
+            {
+                this.prop = prop;
+            }
+        }
+        struct PubCtorStruct
+        {
+            public int field1;
+            char field2;
+
+            public PubCtorStruct(char f)
+            {
+                field2 = f;
+                field1 = 1;
+            }
+        }
         static void Main(string[] args)
         {
-            Faker f = new Faker();
-            f.MaxCircularDependencyDepth = 2;
-            var exp1 = f.Create<Circular1>();
-            var exp2 = f.Create<NestedClass>();
-
             var fakerConfig = new FakerConfig();
             fakerConfig.AddRule<StringGenClass, string, CustomStringGenerator>(c => c.s2);
-            fakerConfig.AddRule<StringGenClass, string, CustomStringGenerator>(c => c.s1);
+            fakerConfig.AddRule<SimpleStruct, string, CustomStringGenerator>(c => c.field1);
             Faker f2 = new Faker(fakerConfig);
-
-            var exp3 = f2.Create<StringGenClass>();
+            f2.MaxCircularDependencyDepth = 1;
+            var exp1 = f2.Create<Circular1>();
+            var exp2 = f2.Create<NestedClass>();
+            var exp3 = f2.Create<PubCtorStruct>();
+            var exp4 = f2.Create<StringGenClass>();
+            var exp5 = f2.Create<SimpleStruct>();
+            var exp6 = f2.Create<PrivSetClass>();
         }
 
     }

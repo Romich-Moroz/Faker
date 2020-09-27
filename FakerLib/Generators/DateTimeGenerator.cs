@@ -1,6 +1,5 @@
 ﻿using FakerLib.PluginSupport;
 using System;
-using System.Collections.Generic;
 
 namespace FakerLib.Generators
 {

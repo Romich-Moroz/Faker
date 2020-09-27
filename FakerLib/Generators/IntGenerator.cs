@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using FakerLib.PluginSupport;
 
 namespace FakerLib.Generators

@@ -25,72 +25,72 @@ namespace FakerLib
         {
             ConstructorInfo[] constructors = typeof(T).GetConstructors(BindingFlags.Instance | BindingFlags.Public);
 
-            if (constructors.Length == 0)
+            if ((constructors.Length == 0 && !typeof(T).IsValueType) ||((currentCircularDependencyDepth = constructionStack.Where(t => t.Equals(typeof(T))).Count()) > MaxCircularDependencyDepth))
             {
                 return default;
             }
-            if ((currentCircularDependencyDepth = constructionStack.Where(t => t.Equals(typeof(T))).Count()) > MaxCircularDependencyDepth)
-            {
-                return default;
-            }
+
             constructionStack.Push(typeof(T));
+
+            object constructed = default;
+            object[] ctorParams = null;
+            ConstructorInfo ctor = null;
 
             foreach (ConstructorInfo cInfo in constructors.OrderByDescending(c => c.GetParameters().Length))
             {
 
-                object[] ctorParams = GenerateCtorParams(cInfo);
+                ctorParams = GenerateCtorParams(cInfo);
 
-
-                object constructed;
                 try
                 {
                     constructed = cInfo.Invoke(ctorParams);
+                    ctor = cInfo;
                 }
                 catch //constructor does not accept such params
                 {
                     continue;
-                }
-
-                GenerateFieldsAndProperties(constructed, ctorParams, cInfo);
-                
-                constructionStack.Pop();
-                return (T)constructed;
+                }             
             }
+            if (typeof(T).IsValueType && constructors.Length == 0)
+            {
+                constructed = Activator.CreateInstance(typeof(T));
+            }
+            GenerateFieldsAndProperties(constructed, ctorParams, ctor);
             constructionStack.Pop();
-            return default;
+            return (T)constructed;
         }
 
         private void GenerateFieldsAndProperties(object constructed, object[] ctorParams, ConstructorInfo cInfo)
         {
-            ParameterInfo[] pInfo = cInfo.GetParameters();
+            ParameterInfo[] pInfo = cInfo?.GetParameters();
             var fields = constructed.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public).Cast<MemberInfo>();
             var properties = constructed.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public).Cast<MemberInfo>();
             var fieldsAndProperties = fields.Concat(properties);
 
             foreach(MemberInfo m in fieldsAndProperties)
             {
-                bool contains = false;
+                bool wasInitialized = false;
 
                 Type memberType = (m as FieldInfo)?.FieldType ?? (m as PropertyInfo)?.PropertyType;
                 object memberValue = (m as FieldInfo)?.GetValue(constructed) ?? (m as PropertyInfo)?.GetValue(constructed);
 
-                for (int i = 0; i < ctorParams.Length; i++) 
+                for (int i = 0; i < ctorParams?.Length; i++) 
                 {
-                    if (ctorParams[i] == memberValue && memberType == pInfo[i].ParameterType)
+                    if ((pInfo != null && ctorParams[i] == memberValue && memberType == pInfo[i].ParameterType && m.Name == pInfo[i].Name) || (constructed.GetType().IsValueType && memberValue != default))
                     {
-                        contains = true;
+                        wasInitialized = true;
                         break;
                     }
                 }
-                if (!contains)
+                if (!wasInitialized)
                 {
                     object newValue = default; // if no generator exist then assign default value
                     try
                     {
                         
-                        if (creationRules?.Any(r => (r.TargetFieldType == memberType) && (r.ParentClassType == cInfo.DeclaringType) && (r.FieldName == m.Name)) == true)
+                        if (creationRules?.Any(r => (r.TargetFieldType == memberType) && (r.ParentClassType == constructed.GetType()) && (r.FieldName == m.Name)) == true)
                         {
-                            object gen = Activator.CreateInstance(creationRules.Single(r => (r.TargetFieldType == memberType) && (r.ParentClassType == cInfo.DeclaringType)
+                            object gen = Activator.CreateInstance(creationRules.Single(r => (r.TargetFieldType == memberType) && (r.ParentClassType == constructed.GetType())
                                                                     && (r.FieldName == m.Name)).FieldGeneratorType);
                             newValue = gen.GetType().InvokeMember("Generate", BindingFlags.InvokeMethod | BindingFlags.Instance | BindingFlags.Public, null, gen, null);
                             

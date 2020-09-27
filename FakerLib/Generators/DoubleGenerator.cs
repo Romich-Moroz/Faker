@@ -1,7 +1,6 @@
 ﻿using System;
 using FakerLib.PluginSupport;
 
-
 namespace FakerLib.Generators
 {
     class DoubleGenerator : Generator<double>
