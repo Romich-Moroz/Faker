@@ -9,11 +9,11 @@ namespace FakerLib.Configuration
 {
     public class FakerConfig
     {
-        private List<Rule> rules;
+        private List<Rule> rules = new List<Rule>();
 
-        public void AddRule<T, K, G>(Expression<Action<T>> exp) where G : Generator<K>
+        public void AddRule<T, K, G>(Expression<Func<T,K>> exp) where G : Generator<K>
         {
-            rules.Add(new Rule(typeof(T), typeof(K), typeof(G), exp));
+            rules.Add(new Rule(typeof(T), typeof(K), typeof(G), ((MemberExpression)exp.Body).Member.Name));
         }
 
         public List<Rule> GetCreationRules()

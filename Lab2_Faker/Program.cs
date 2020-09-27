@@ -76,9 +76,11 @@ namespace Lab2_Faker
             var exp2 = f.Create<NestedClass>();
 
             var fakerConfig = new FakerConfig();
+            fakerConfig.AddRule<StringGenClass, string, CustomStringGenerator>(c => c.s2);
             fakerConfig.AddRule<StringGenClass, string, CustomStringGenerator>(c => c.s1);
+            Faker f2 = new Faker(fakerConfig);
 
-            Faker f2 = new Faker();
+            var exp3 = f2.Create<StringGenClass>();
         }
 
     }
