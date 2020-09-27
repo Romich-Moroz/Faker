@@ -5,15 +5,20 @@ using System.Data;
 using System.Linq.Expressions;
 using System.Text;
 
-namespace FakerLib
+namespace FakerLib.Configuration
 {
     public class FakerConfig
     {
         private List<Rule> rules;
 
-        public void AddRule<T, K, G>(Expression<K> exp) where G : Generator<K>
+        public void AddRule<T, K, G>(Expression<Action<T>> exp) where G : Generator<K>
         {
             rules.Add(new Rule(typeof(T), typeof(K), typeof(G), exp));
+        }
+
+        public List<Rule> GetCreationRules()
+        {
+            return rules;
         }
     }
 }

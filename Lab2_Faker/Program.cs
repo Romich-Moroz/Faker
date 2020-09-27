@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using FakerLib;
+using FakerLib.Configuration;
 using FakerLib.Generators;
 
 namespace Lab2_Faker
@@ -46,15 +47,25 @@ namespace Lab2_Faker
         }
         class Circular1
         {
-            public Circular2 c;
+            public Circular2 c { get; set; }
         }
         class Circular2
         {
-            public Circular3 c;
+            public Circular3 c { get; set; }
         }
         class Circular3
         {
-            public Circular1 c;
+            public Circular1 c { get; }
+        }
+
+        class StringGenClass
+        {
+            public string s1;
+            public string s2 { get; }
+            public StringGenClass(string s2)
+            {
+                this.s2 = s2;
+            }
         }
 
         static void Main(string[] args)
@@ -64,6 +75,10 @@ namespace Lab2_Faker
             var exp1 = f.Create<Circular1>();
             var exp2 = f.Create<NestedClass>();
 
+            var fakerConfig = new FakerConfig();
+            fakerConfig.AddRule<StringGenClass, string, CustomStringGenerator>(c => c.s1);
+
+            Faker f2 = new Faker();
         }
 
     }

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using System.Linq.Expressions;
 
-namespace FakerLib
+namespace FakerLib.Configuration
 {
-    class Rule
+    public class Rule
     {
         public Expression AssignOperation { get; private set; }
         public Type ParentClassType { get; private set; }

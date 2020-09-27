@@ -1,4 +1,5 @@
-﻿using FakerLib.PluginSupport;
+﻿using FakerLib.Configuration;
+using FakerLib.PluginSupport;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,13 +11,15 @@ namespace FakerLib
     public class Faker
     {
 
-        public int MaxCircularDependencyDepth { get; set; } = 5;
+        public int MaxCircularDependencyDepth { get; set; } = 0;
 
         private int currentCircularDependencyDepth = 0;
 
         private Dictionary<Type, IGenerator> generators;
 
         private Stack<Type> constructionStack = new Stack<Type>();
+
+        private List<Rule> CreationRules;
 
         public T Create<T>() 
         {
@@ -34,39 +37,11 @@ namespace FakerLib
 
             foreach (ConstructorInfo cInfo in constructors.OrderByDescending(c => c.GetParameters().Length))
             {
-                ParameterInfo[] pInfo = cInfo.GetParameters();
-                object[] ctorParams = new object[pInfo.Length];
-                for (int i = 0; i < ctorParams.Length; i++)
-                {
-                    Type fieldType = pInfo[i].ParameterType;                   
-                    try
-                    {
-                        if (!fieldType.IsGenericType)
-                        {
-                            ctorParams[i] = generators[fieldType].GetType().InvokeMember("Generate", BindingFlags.InvokeMethod |
-                                                    BindingFlags.Instance | BindingFlags.Public, null, generators[fieldType], null);
-                        }
-                        else
-                        {
-                            Type[] tmp = fieldType.GetGenericArguments();
-                            ctorParams[i] = generators[tmp[0]].GetType().InvokeMember("GenerateList", BindingFlags.InvokeMethod |
-                                                    BindingFlags.Instance | BindingFlags.Public, null, generators[tmp[0]], null);
-                        }
-                    }
-                    catch (KeyNotFoundException e)
-                    {
-                        if (!(fieldType.IsPrimitive || (fieldType == typeof(string)) || (fieldType== typeof(decimal))))
-                        {
-                            ctorParams[i] = this.GetType().GetMethod("Create").MakeGenericMethod(fieldType).Invoke(this, null);
-                        }
-                        else
-                        {
-                            ctorParams[i] = default;
-                        }
-                        
-                    }
 
-                }
+                ParameterInfo[] pInfo = cInfo.GetParameters();
+
+                object[] ctorParams = GenerateCtorParams(pInfo);
+
                 object constructed;
                 try
                 {
@@ -77,21 +52,37 @@ namespace FakerLib
                     continue;
                 }
 
-                foreach (FieldInfo f in constructed.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
-                {
-                    bool contains = false;
-                    for (int i = 0; i < ctorParams.Length; i++)
-                    {
-                        if (ctorParams[i]== f.GetValue(constructed) && f.FieldType == pInfo[i].ParameterType)
-                        {
-                            contains = true;
-                        }
-                    }
+                GenerateFields(constructed, ctorParams, pInfo);
 
-                    if (!contains)
+                GenerateProperties(constructed, ctorParams, pInfo);
+
+                
+                constructionStack.Pop();
+                return (T)constructed;
+            }
+            constructionStack.Pop();
+            return default;
+        }
+
+        private void GenerateProperties(object constructed, object[] ctorParams, ParameterInfo[] pInfo)
+        {
+
+            foreach (PropertyInfo f in constructed.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                bool contains = false;
+                for (int i = 0; i < ctorParams.Length; i++)
+                {
+                    if (ctorParams[i] == f.GetValue(constructed) && f.PropertyType == pInfo[i].ParameterType)
                     {
-                        Type fieldType = f.FieldType;
-                        
+                        contains = true;
+                    }
+                }
+
+                if (!contains)
+                {
+                    Type fieldType = f.PropertyType;
+                    if (f.CanWrite)
+                    {
                         try
                         {
                             if (!fieldType.IsGenericType)
@@ -115,20 +106,103 @@ namespace FakerLib
                             else
                             {
                                 f.SetValue(constructed, default); // if no generator exist then assign default value
-                            }                           
+                            }
+                        }
+                    }                   
+                }
+            }
+        }
+
+        private void GenerateFields(object constructed, object[] ctorParams, ParameterInfo[] pInfo)
+        {
+            foreach (FieldInfo f in constructed.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public))
+            {
+                bool contains = false;
+                for (int i = 0; i < ctorParams.Length; i++)
+                {
+                    if (ctorParams[i] == f.GetValue(constructed) && f.FieldType == pInfo[i].ParameterType)
+                    {
+                        contains = true;
+                    }
+                }
+
+                if (!contains)
+                {
+                    Type fieldType = f.FieldType;
+
+                    try
+                    {
+                        if (!fieldType.IsGenericType)
+                        {
+                            f.SetValue(constructed, generators[fieldType].GetType().InvokeMember("Generate", BindingFlags.InvokeMethod |
+                                                            BindingFlags.Instance | BindingFlags.Public, null, generators[fieldType], null));
+                        }
+                        else
+                        {
+                            Type[] tmp = fieldType.GetGenericArguments();
+                            f.SetValue(constructed, generators[tmp[0]].GetType().InvokeMember("GenerateList", BindingFlags.InvokeMethod |
+                                                            BindingFlags.Instance | BindingFlags.Public, null, generators[tmp[0]], null));
+                        }
+                    }
+                    catch (KeyNotFoundException e)
+                    {
+                        if (!(fieldType.IsPrimitive || (fieldType == typeof(string)) || (fieldType == typeof(decimal))))
+                        {
+                            f.SetValue(constructed, this.GetType().GetMethod("Create").MakeGenericMethod(fieldType).Invoke(this, null));
+                        }
+                        else
+                        {
+                            f.SetValue(constructed, default); // if no generator exist then assign default value
                         }
                     }
                 }
-                constructionStack.Pop();
-                return (T)constructed;
             }
-            constructionStack.Pop();
-            return default;
+        }
+
+        private object[] GenerateCtorParams(ParameterInfo[] pInfo)
+        {
+            object[] ctorParams = new object[pInfo.Length];
+            for (int i = 0; i < ctorParams.Length; i++)
+            {
+                Type fieldType = pInfo[i].ParameterType;
+                try
+                {
+                    if (!fieldType.IsGenericType)
+                    {
+                        ctorParams[i] = generators[fieldType].GetType().InvokeMember("Generate", BindingFlags.InvokeMethod |
+                                                BindingFlags.Instance | BindingFlags.Public, null, generators[fieldType], null);
+                    }
+                    else
+                    {
+                        Type[] tmp = fieldType.GetGenericArguments();
+                        ctorParams[i] = generators[tmp[0]].GetType().InvokeMember("GenerateList", BindingFlags.InvokeMethod |
+                                                BindingFlags.Instance | BindingFlags.Public, null, generators[tmp[0]], null);
+                    }
+                }
+                catch (KeyNotFoundException e)
+                {
+                    if (!(fieldType.IsPrimitive || (fieldType == typeof(string)) || (fieldType == typeof(decimal))))
+                    {
+                        ctorParams[i] = this.GetType().GetMethod("Create").MakeGenericMethod(fieldType).Invoke(this, null);
+                    }
+                    else
+                    {
+                        ctorParams[i] = default;
+                    }
+
+                }
+            }
+            return ctorParams;
         }
 
         public Faker()
         {
             this.generators = LoadAllAvailableGenerators();
+        }
+
+        public Faker(FakerConfig config) : this()
+        {
+            CreationRules = config.GetCreationRules();
         }
 
         private Dictionary<Type, IGenerator> LoadAllAvailableGenerators()
@@ -144,7 +218,7 @@ namespace FakerLib
                 Assembly asm = Assembly.LoadFrom(str);
                 foreach (Type t in asm.GetTypes())
                 {
-                    if (IsSupportedPlugin(t, typeof(GeneratorPlugin<>)))
+                    if (IsRequiredType(t, typeof(GeneratorPlugin<>)))
                     {
                         var tmp = Activator.CreateInstance(t);
                         result.Add(t.BaseType.GetGenericArguments()[0], (IGenerator)tmp);
@@ -154,7 +228,7 @@ namespace FakerLib
             }
             foreach (Type t in Assembly.GetExecutingAssembly().GetTypes())
             {
-                if (IsSupportedPlugin(t, typeof(Generator<>)))
+                if (IsRequiredType(t, typeof(Generator<>)))
                 {
                     result.Add(t.BaseType.GetGenericArguments()[0], (IGenerator)Activator.CreateInstance(t));
                 }              
@@ -163,7 +237,7 @@ namespace FakerLib
 
         }
 
-        private bool IsSupportedPlugin(Type plugin, Type required)
+        private bool IsRequiredType(Type plugin, Type required)
         {
             while (plugin != null && plugin != typeof(object))
             {
