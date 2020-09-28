@@ -23,20 +23,42 @@ namespace FakerLib
 
         public T Create<T>() 
         {
+            
+            if (IsPrimitive(typeof(T))) // primitive types creation
+            {
+                try
+                {
+                    return (T)generators[typeof(T)].GetType().InvokeMember("Generate", BindingFlags.InvokeMethod | BindingFlags.Instance
+                                                                           | BindingFlags.Public, null, generators[typeof(T)], null);
+                    
+                }
+                catch
+                {
+                    return default;
+                }    
+            }
+            
             ConstructorInfo[] constructors = typeof(T).GetConstructors(BindingFlags.Instance | BindingFlags.Public);
 
-            if ((constructors.Length == 0 && !typeof(T).IsValueType) ||((currentCircularDependencyDepth = constructionStack.Where(t => t.Equals(typeof(T))).Count()) > MaxCircularDependencyDepth))
+            if ((constructors.Length == 0 && !typeof(T).IsValueType) ||((currentCircularDependencyDepth = constructionStack.
+                Where(t => t.Equals(typeof(T))).Count()) > MaxCircularDependencyDepth))
             {
                 return default;
             }
 
             constructionStack.Push(typeof(T));
 
+
             object constructed = default;
+            if (typeof(T).IsValueType && constructors.Length == 0) // struct without public constructors creation
+            {
+                constructed = Activator.CreateInstance(typeof(T));
+            }
+
             object[] ctorParams = null;
             ConstructorInfo ctor = null;
 
-            foreach (ConstructorInfo cInfo in constructors.OrderByDescending(c => c.GetParameters().Length))
+            foreach (ConstructorInfo cInfo in constructors.OrderByDescending(c => c.GetParameters().Length)) // try to create object with constructor
             {
 
                 ctorParams = GenerateCtorParams(cInfo);
@@ -50,12 +72,9 @@ namespace FakerLib
                 {
                     continue;
                 }             
-            }
-            if (typeof(T).IsValueType && constructors.Length == 0)
-            {
-                constructed = Activator.CreateInstance(typeof(T));
-            }
-            GenerateFieldsAndProperties(constructed, ctorParams, ctor);
+            }           
+            GenerateFieldsAndProperties(constructed, ctorParams, ctor); // generate all public fields and properties that were not assigned with constructor
+
             constructionStack.Pop();
             return (T)constructed;
         }
@@ -76,7 +95,8 @@ namespace FakerLib
 
                 for (int i = 0; i < ctorParams?.Length; i++) 
                 {
-                    if ((pInfo != null && ctorParams[i] == memberValue && memberType == pInfo[i].ParameterType && m.Name == pInfo[i].Name) || (constructed.GetType().IsValueType && memberValue != default))
+                    object defaultValue = this.GetType().GetMethod("GetDefaultValue", BindingFlags.NonPublic | BindingFlags.Instance).MakeGenericMethod(memberType).Invoke(this, null);
+                    if ((pInfo != null && ctorParams[i] == memberValue && memberType == pInfo[i].ParameterType && m.Name == pInfo[i].Name) || defaultValue?.Equals(memberValue) == false)
                     {
                         wasInitialized = true;
                         break;
@@ -112,7 +132,7 @@ namespace FakerLib
                     }
                     catch (KeyNotFoundException e)
                     {
-                        if (!(memberType.IsPrimitive || (memberType == typeof(string)) || (memberType == typeof(decimal))))
+                        if (!IsPrimitive(memberType))
                         {
                             newValue = this.GetType().GetMethod("Create").MakeGenericMethod(memberType).Invoke(this, null);
                         }
@@ -123,9 +143,10 @@ namespace FakerLib
                         (m as PropertyInfo).SetValue(constructed, newValue);
                     }
                 }
-            }
+            }            
 
         }
+
 
         private object[] GenerateCtorParams(ConstructorInfo cInfo)
         {
@@ -164,7 +185,7 @@ namespace FakerLib
                 }
                 catch (KeyNotFoundException e)
                 {
-                    if (!(fieldType.IsPrimitive || (fieldType == typeof(string)) || (fieldType == typeof(decimal))))
+                    if (!IsPrimitive(fieldType))
                     {
                         newValue = this.GetType().GetMethod("Create").MakeGenericMethod(fieldType).Invoke(this, null);
                     }
@@ -183,6 +204,11 @@ namespace FakerLib
         public Faker(FakerConfig config) : this()
         {
             creationRules = config.GetCreationRules();
+        }
+
+        private object GetDefaultValue<T>()
+        {
+            return default(T);
         }
 
         private Dictionary<Type, IGenerator> LoadAllAvailableGenerators()
@@ -215,6 +241,15 @@ namespace FakerLib
             }
             return result;
 
+        }
+
+        private bool IsPrimitive(Type t)
+        {
+            if (!(t.IsPrimitive || (t == typeof(string)) || (t == typeof(decimal)) || (t == typeof(DateTime))))
+            {
+                return false;
+            }
+            return true;
         }
 
         private bool IsRequiredType(Type plugin, Type required)

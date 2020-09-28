@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using FakerLib;
 using FakerLib.Configuration;
 
@@ -105,6 +106,9 @@ namespace Lab2_Faker
             var exp4 = f2.Create<StringGenClass>();
             var exp5 = f2.Create<SimpleStruct>();
             var exp6 = f2.Create<PrivSetClass>();
+            var exp7 = f2.Create<int>();
+            var exp8 = f2.Create<DateTime>();
+            var exp9 = f2.Create<string>();
         }
 
     }
